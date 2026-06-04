@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;900&display=swap" rel="stylesheet">
+  <style>
+    html {
+      background-color: #FFFDF4;
+      margin: 0;
+      padding: 0;
+    }
+
+    ::selection {
+      background-color: #FFE5EC;
+      color: #000000;
+    }
+    body {
+      width: 250px;
+      padding: 18px 18px 0 18px;
+      margin: 0;
+      background-color: #FFFDF4;
+      /* Crisp warm canvas white */
+      color: #000000;
+      box-sizing: border-box;
+      font-family: 'Fredoka', system-ui, sans-serif;
+      position: relative;
+      overflow: hidden;
+    }
+    /* Crucial: Ensures interface elements stack clearly above background decorations */
+    .content-layer {
+      position: relative;
+      z-index: 3;
+    }
+    h3 {
+      margin: 0 0 13px 0;
+      font-size: 19px;
+      font-weight: 900;
+      color: #000000;
+      letter-spacing: -0.3px;
+    }
+    label {
+      font-size: 11px;
+      font-weight: 900;
+      display: block;
+      margin-bottom: 5px;
+      color: #000000;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+    .custom-select {
+      position: relative;
+      width: 100%;
+      margin-bottom: 13px;
+      user-select: none;
+    }
+    .custom-select-trigger {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: 14px;
+      border: 3px solid #000000;
+      background: #FFFFFF;
+      color: #000000;
+      font-family: 'Fredoka', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 4px 4px 0px #000000;
+      cursor: pointer;
+      box-sizing: border-box;
+      transition: transform 0.05s ease, box-shadow 0.05s ease;
+    }
+    .custom-select-trigger::after {
+      content: "▼";
+      display: inline-block;
+      font-size: 10px;
+      color: #000000;
+      margin-left: 10px;
+      transition: transform 0.15s ease;
+    }
+    .custom-select.open .custom-select-trigger::after {
+      transform: rotate(180deg);
+    }
+    .custom-select:active .custom-select-trigger {
+      transform: translate(2px, 2px);
+      box-shadow: 2px 2px 0px #000000;
+    }
+    .custom-options {
+      display: none;
+      position: relative;
+      margin-top: 8px;
+      background: #FFFDF4;
+      border: 3px solid #000000;
+      border-radius: 14px;
+      box-shadow: 4px 4px 0px #000000;
+      z-index: 10;
+      overflow: hidden;
+      box-sizing: border-box;
+    }
+    .custom-select.open .custom-options {
+      display: block;
+    }
+    .custom-option {
+      padding: 10px 14px;
+      font-family: 'Fredoka', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      color: #000000;
+      cursor: pointer;
+      background: #FFFFFF;
+      transition: background-color 0.1s ease;
+      border-bottom: 2px solid #000000;
+      text-align: left;
+    }
+    .custom-option:last-child {
+      border-bottom: none;
+    }
+    .custom-option:hover {
+      background-color: #FFE5EC;
+    }
+    .custom-option.selected {
+      background-color: #FF70A6;
+      color: #FFFFFF;
+    }
+    .no-margin {
+      margin-bottom: 0 !important;
+    }
+    .subtitle {
+      font-size: 9px;
+      font-weight: 900;
+      color: rgba(0, 0, 0, 0.45);
+      margin: -10px 0 14px 0;
+      letter-spacing: 0.2px;
+      line-height: 1.2;
+    }
+
+    .footer-border {
+      background-color: #FFE5EC;
+      color: rgba(0, 0, 0, 0.4);
+      font-size: 8px;
+      font-weight: 900;
+      text-align: center;
+      height: 10px;
+      margin: 18px -18px 0 -18px;
+      position: relative;
+      z-index: 5;
+      font-family: 'Fredoka', sans-serif;
+      text-transform: lowercase;
+      letter-spacing: 0.3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+    }
+    /* --- Vector SVG Background Layouts --- */
+    .vector-shape {
+      position: absolute;
+      z-index: 1;
+      pointer-events: none;
+    }
+    /* Pink Donut - Peeking Top Right */
+    .shape-donut {
+      top: 10px;
+      right: -10px;
+      width: 42px;
+      height: 42px;
+    }
+    /* Cyan Triangle - Peeking Middle Left */
+    .shape-triangle {
+      top: 88px;
+      left: -12px;
+      width: 35px;
+      height: 35px;
+    }
+    /* Orange Rectangle - Peeking Lower Right (Rescued from the bottom layer cover-up!) */
+    .shape-rect {
+      top: 138px;
+      right: -12px;
+      width: 36px;
+      height: 36px;
+    }
+    /* Custom configuration for the background hearts layer */
+    .faded-heart {
+      position: absolute;
+      z-index: 2;
+      /* Sits cleanly between vector shapes and white text boxes */
+      pointer-events: none;
+      fill: #FF70A6;
+      opacity: 0.22;
+      /* Enhanced visibility, beautifully soft but fully visible */
+      width: 24px;
+      height: 24px;
+    }
+  </style>
+</head>
+<body>
+  <svg class="vector-shape shape-donut" viewBox="0 0 40 40">
+    <circle cx="20" cy="20" r="16" fill="#FF70A6" stroke="#000000" stroke-width="3" />
+    <circle cx="20" cy="20" r="6" fill="#FFFDF4" stroke="#000000" stroke-width="3" />
+    <path d="M 20 4 A 16 16 0 0 1 36 20" fill="none" stroke="#FFFFFF" stroke-width="1.5" opacity="0.5" />
+  </svg>
+  <svg class="vector-shape shape-triangle" viewBox="0 0 40 40" style="transform: rotate(15deg);">
+    <polygon points="20,4 36,34 4,34" fill="#4CC9F0" stroke="#000000" stroke-width="3" stroke-linejoin="round" />
+    <line x1="20" y1="12" x2="20" y2="28" stroke="#000000" stroke-width="2" stroke-linecap="round" opacity="0.3" />
+  </svg>
+  <svg class="vector-shape shape-rect" viewBox="0 0 40 40" style="transform: rotate(-15deg);">
+    <rect x="4" y="8" width="32" height="24" rx="5" fill="#FF9F1C" stroke="#000000" stroke-width="3" />
+    <line x1="16" y1="20" x2="24" y2="20" stroke="#000000" stroke-width="2" stroke-linecap="round" />
+    <line x1="20" y1="16" x2="20" y2="24" stroke="#000000" stroke-width="2" stroke-linecap="round" />
+  </svg>
+  <svg class="faded-heart" style="top: 6px; left: 8px; transform: rotate(-10deg) scale(0.7); fill: #FF477E;" viewBox="0 0 24 24">
+    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+  </svg>
+  <svg class="faded-heart" style="top: 18px; left: 155px; transform: rotate(20deg) scale(0.85); fill: #FFBE0B;" viewBox="0 0 24 24">
+    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+  </svg>
+  <svg class="faded-heart" style="top: 35px; left: 105px; transform: rotate(-25deg) scale(0.6); fill: #00F5D4;" viewBox="0 0 24 24">
+    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+  </svg>
+  <svg class="faded-heart" style="top: 65px; right: 12px; transform: rotate(15deg) scale(0.75); fill: #7209B7;" viewBox="0 0 24 24">
+    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+  </svg>
+  <svg class="faded-heart" style="top: 92px; left: 6px; transform: rotate(-30deg) scale(0.7); fill: #F72585;" viewBox="0 0 24 24">
+    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+  </svg>
+  <!-- Middle area hearts (Gap between Select 1 and Select 2) -->
+  <svg class="faded-heart" style="top: 122px; left: 155px; transform: rotate(12deg) scale(0.65); fill: #FF70A6;" viewBox="0 0 24 24">
+    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+  </svg>
+  <svg class="faded-heart" style="top: 115px; right: 28px; transform: rotate(-25deg) scale(0.6); fill: #00F5D4;" viewBox="0 0 24 24">
+    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+  </svg>
+  <svg class="faded-heart" style="top: 114px; left: 22px; transform: rotate(20deg) scale(0.55); fill: #FFBE0B;" viewBox="0 0 24 24">
+    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+  </svg>
+  <svg class="faded-heart" style="top: 146px; left: 115px; transform: rotate(-15deg) scale(0.6); fill: #F72585;" viewBox="0 0 24 24">
+    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+  </svg>
+  <!-- Lower area hearts -->
+  <svg class="faded-heart" style="top: 145px; right: 28px; transform: rotate(35deg) scale(0.75); fill: #4CC9F0;" viewBox="0 0 24 24">
+    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+  </svg>
+  <svg class="faded-heart" style="bottom: 22px; left: 8px; transform: rotate(-15deg) scale(0.8); fill: #FF477E;" viewBox="0 0 24 24">
+    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+  </svg>
+  <svg class="faded-heart" style="bottom: 12px; right: 18px; transform: rotate(25deg) scale(0.85); fill: #06D6A0;" viewBox="0 0 24 24">
+    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+  </svg>
+  <div class="content-layer">
+    <h3>Snappy setup :P</h3>
+    <div class="subtitle">Shift+S to snap :3<br>Shorts supported too meow >w<</div>
+    <label>File Format</label>
+    <div class="custom-select" id="format-select">
+      <div class="custom-select-trigger">JPEG (comfy, smol)</div>
+      <div class="custom-options">
+        <div class="custom-option" data-value="image/webp">WebP (finicky, but mini++)</div>
+        <div class="custom-option selected" data-value="image/jpeg">JPEG (comfy, smol)</div>
+        <div class="custom-option" data-value="image/png">PNG (lossless, chonky)</div>
+      </div>
+    </div>
+    <label>Max Resolution Limit</label>
+    <div class="custom-select no-margin" id="resolution-select">
+      <div class="custom-select-trigger">Source Quality ☆▽☆</div>
+      <div class="custom-options">
+        <div class="custom-option selected" data-value="native">Source Quality ☆▽☆</div>
+        <div class="custom-option" data-value="3240">6K max height (3240p)</div>
+        <div class="custom-option" data-value="2160">4K max height (2160p)</div>
+        <div class="custom-option" data-value="1440">2K max height (1440p)</div>
+        <div class="custom-option" data-value="1080">1080p max height</div>
+        <div class="custom-option" data-value="720">720p max height :C</div>
+      </div>
+    </div>
+  </div>
+  <div class="footer-border">💗 made by mina vian :3</div>
+  <script src="popup.js"></script>
+</body>
+</html>

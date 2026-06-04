@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube High-Res Frame Capture",
+  "version": "1.2",
+  "description": "Captures frames with customizable file formats and resolution limits.",
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.youtube.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_end"
+    }
+  ]
+}

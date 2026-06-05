@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "YouTube High-Res Frame Capture",
+  "name": "Snappy! Screenshot for YouTube",
   "version": "1.2",
   "description": "Captures frames with customizable file formats and resolution limits.",
   "permissions": [
@@ -8,7 +8,13 @@
     "storage"
   ],
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": "Picture3.png"
+  },
+  "icons": {
+    "16": "Picture3.png",
+    "48": "Picture3.png",
+    "128": "Picture3.png"
   },
   "content_scripts": [
     {

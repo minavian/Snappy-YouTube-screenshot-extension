@@ -29,7 +29,12 @@ document.addEventListener('DOMContentLoaded', () => {
         option.classList.add('selected');
         
         // Update trigger display text
-        trigger.textContent = option.textContent;
+        const textSpan = trigger.querySelector('.trigger-text');
+        if (textSpan) {
+          textSpan.textContent = option.textContent;
+        } else {
+          trigger.textContent = option.textContent;
+        }
         
         // Save choice in local storage
         const val = option.getAttribute('data-value');
@@ -52,7 +57,13 @@ document.addEventListener('DOMContentLoaded', () => {
       if (selectedOption) {
         options.forEach(opt => opt.classList.remove('selected'));
         selectedOption.classList.add('selected');
-        trigger.textContent = selectedOption.textContent;
+        
+        const textSpan = trigger.querySelector('.trigger-text');
+        if (textSpan) {
+          textSpan.textContent = selectedOption.textContent;
+        } else {
+          trigger.textContent = selectedOption.textContent;
+        }
       }
     });
   }

@@ -136,11 +136,12 @@
       border-bottom: none;
     }
     .custom-option:hover {
-      background-color: #FFE5EC;
+      background-color: #FFEBF0;
     }
     .custom-option.selected {
-      background-color: #FF70A6;
-      color: #FFFFFF;
+      background-color: #FFD6E0;
+      color: #000000;
+      font-weight: 900;
     }
     .no-margin {
       margin-bottom: 0 !important;
@@ -152,6 +153,76 @@
       margin: -10px 0 14px 0;
       letter-spacing: 0.2px;
       line-height: 1.2;
+    }
+
+    .manual-download-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 42px;
+      margin-top: 13px;
+      padding: 0 14px;
+      border-radius: 14px;
+      border: 3px solid #000000;
+      background: #FFE5EC;
+      color: #000000;
+      font-family: 'Fredoka', sans-serif;
+      font-size: 13px;
+      font-weight: 900;
+      box-shadow: 4px 4px 0px #000000;
+      cursor: pointer;
+      box-sizing: border-box;
+      transition: transform 0.05s ease, box-shadow 0.05s ease, background-color 0.15s ease;
+      outline: none;
+      user-select: none;
+    }
+    .manual-download-btn:hover {
+      background-color: #FFD6E0;
+    }
+    .manual-download-btn:active {
+      transform: translate(2px, 2px);
+      box-shadow: 2px 2px 0px #000000;
+    }
+    .btn-content-wrap {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      line-height: 1;
+      will-change: transform, opacity;
+    }
+    .manual-download-btn svg {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
+      flex-shrink: 0;
+      display: block;
+    }
+    .btn-text {
+      display: inline-block;
+      line-height: 1;
+    }
+    @keyframes contentPopSwap {
+      0% {
+        transform: scale(1);
+        opacity: 1;
+      }
+      40% {
+        transform: scale(0.6);
+        opacity: 0;
+      }
+      65% {
+        transform: scale(1.2);
+        opacity: 0.95;
+      }
+      100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+    .btn-content-wrap.pop-swap {
+      animation: contentPopSwap 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
     }
 
     .footer-border {
@@ -173,6 +244,14 @@
       box-sizing: border-box;
     }
     /* --- Vector SVG Background Layouts --- */
+    /* Clips the peeking shapes at the popup's edges so they can't widen it past 250px.
+       overflow: clip (unlike hidden) doesn't make anything a scroll container, so animations stay cheap */
+    .decor {
+      position: absolute;
+      inset: 0;
+      overflow: clip;
+      pointer-events: none;
+    }
     .vector-shape {
       position: absolute;
       z-index: 1;
@@ -214,6 +293,7 @@
   </style>
 </head>
 <body>
+  <div class="decor">
   <svg class="vector-shape shape-donut" viewBox="0 0 40 40">
     <circle cx="20" cy="20" r="16" fill="#FF70A6" stroke="#000000" stroke-width="3" />
     <circle cx="20" cy="20" r="6" fill="#FFFDF4" stroke="#000000" stroke-width="3" />
@@ -266,6 +346,7 @@
   <svg class="faded-heart" style="bottom: 12px; right: 18px; transform: rotate(25deg) scale(0.85); fill: #06D6A0;" viewBox="0 0 24 24">
     <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
   </svg>
+  </div>
   <div class="content-layer">
     <h3>Snappy setup :P</h3>
     <div class="subtitle">Shift+S to snap :3<br>Shorts supported too meow >w<</div>
@@ -300,6 +381,14 @@
         <div class="custom-option" data-value="720">720p max height :C</div>
       </div>
     </div>
+    <button class="manual-download-btn" id="manual-download-btn" type="button">
+      <span class="btn-content-wrap">
+        <svg viewBox="0 0 24 24">
+          <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+        </svg>
+        <span class="btn-text">Manual download</span>
+      </span>
+    </button>
   </div>
   <div class="footer-border">💗 made by mina vian :3</div>
   <script src="popup.js"></script>

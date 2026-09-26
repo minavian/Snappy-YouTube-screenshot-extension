@@ -36,6 +36,98 @@ style.textContent = `
       transform: scale(1.005);
     }
   }
+  /* Shorts capture button: same 48x78 footprint as YouTube's own like/share/remix buttons */
+  .yt-shorts-capture-btn {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 48px;
+    padding-bottom: 8px;
+    cursor: pointer;
+    user-select: none;
+    outline: none;
+  }
+  /* YouTube adds margin-top: 16px to every child of the action bar except its own buttons */
+  reel-action-bar-view-model > .yt-shorts-capture-btn {
+    margin-top: 0;
+  }
+  .yt-shorts-capture-circle {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.05);
+    transition: background-color 0.2s;
+  }
+  .yt-shorts-capture-btn:hover .yt-shorts-capture-circle,
+  .yt-shorts-capture-btn:focus-visible .yt-shorts-capture-circle {
+    background: rgba(0, 0, 0, 0.1);
+  }
+  .yt-shorts-capture-circle svg {
+    width: 26px;
+    height: 26px;
+    fill: none;
+    stroke: #0f0f0f;
+    stroke-width: 1.8;
+  }
+  /* Label typography measured from YouTube's own "Share" / "Remix" labels */
+  .yt-shorts-capture-label {
+    margin-top: 4px;
+    font: 400 12px/18px Roboto, Arial, sans-serif;
+    color: #0f0f0f;
+  }
+  /* Hover tooltip, sliding in from the left of the button like YouTube's player tooltips */
+  .yt-shorts-capture-tooltip {
+    position: absolute;
+    right: calc(100% + 10px);
+    top: 24px;
+    transform: translate(6px, -50%);
+    opacity: 0;
+    pointer-events: none;
+    white-space: nowrap;
+    padding: 7px 10px;
+    border-radius: 8px;
+    background: rgba(28, 28, 28, 0.9);
+    color: #fff;
+    font: 500 13px/1 Roboto, Arial, sans-serif;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    z-index: 2147483646;
+  }
+  .yt-shorts-capture-btn:hover .yt-shorts-capture-tooltip,
+  .yt-shorts-capture-btn:focus-visible .yt-shorts-capture-tooltip {
+    opacity: 1;
+    transform: translate(0, -50%);
+  }
+  /* Dark theme */
+  html[dark] .yt-shorts-capture-circle {
+    background: rgba(255, 255, 255, 0.2);
+  }
+  html[dark] .yt-shorts-capture-btn:hover .yt-shorts-capture-circle,
+  html[dark] .yt-shorts-capture-btn:focus-visible .yt-shorts-capture-circle {
+    background: rgba(255, 255, 255, 0.3);
+  }
+  html[dark] .yt-shorts-capture-circle svg {
+    stroke: #fff;
+  }
+  html[dark] .yt-shorts-capture-label {
+    color: #f1f1f1;
+  }
+  /* Narrow windows: YouTube overlays the action bar on top of the video */
+  reel-action-bar-view-model:has(.ytSpecButtonShapeWithLabelIsOverlay) .yt-shorts-capture-circle {
+    background: rgba(0, 0, 0, 0.3);
+  }
+  reel-action-bar-view-model:has(.ytSpecButtonShapeWithLabelIsOverlay) .yt-shorts-capture-btn:hover .yt-shorts-capture-circle {
+    background: rgba(0, 0, 0, 0.45);
+  }
+  reel-action-bar-view-model:has(.ytSpecButtonShapeWithLabelIsOverlay) .yt-shorts-capture-circle svg {
+    stroke: #fff;
+  }
+  reel-action-bar-view-model:has(.ytSpecButtonShapeWithLabelIsOverlay) .yt-shorts-capture-label {
+    color: #fff;
+  }
 `;
 (document.head || document.documentElement).appendChild(style);
 
@@ -140,11 +232,13 @@ function captureFrame(specificVideo = null) {
   triggerFlashAnimation(video);
 
   // Animate the button SVG immediately for responsive feedback
-  const activeBtn = specificVideo 
-    ? (specificVideo.closest('ytd-reel-video-renderer') ? specificVideo.closest('ytd-reel-video-renderer').querySelector('#yt-shorts-capture-btn') : null)
-    : (document.querySelector('#yt-shorts-capture-btn') || document.querySelector('#yt-native-capture-btn'));
-  
-  const svg = activeBtn ? activeBtn.querySelector('svg') : document.querySelector('#yt-native-capture-btn svg');
+  // (the button belonging to the captured video: its own Shorts reel, or the watch-page player)
+  const activeReel = video.closest('ytd-reel-video-renderer');
+  const activeBtn = activeReel
+    ? activeReel.querySelector('.yt-shorts-capture-btn')
+    : document.querySelector('#yt-native-capture-btn');
+
+  const svg = activeBtn ? activeBtn.querySelector('svg') : null;
   if (svg) {
     if (!svg.classList.contains('rotated-180') && !svg.classList.contains('rotated-360')) {
       svg.classList.add('rotated-180');
@@ -194,14 +288,13 @@ function captureFrame(specificVideo = null) {
       // Extract video title safely (handling watch vs shorts pages)
       let videoTitle = 'youtube-frame';
       if (window.location.href.includes('/shorts')) {
+        // The Short's title under the video, falling back to the Shorts player's own (hidden) title bar
         const activeReel = video.closest('ytd-reel-video-renderer');
-        if (activeReel) {
-          const titleEl = activeReel.querySelector('h2.title') || 
-                          activeReel.querySelector('.ytd-reel-player-header') ||
-                          activeReel.querySelector('#overlay-metadata h2') ||
-                          activeReel.querySelector('yt-formatted-string.title');
-          if (titleEl) videoTitle = titleEl.innerText || titleEl.textContent;
-        }
+        const player = video.closest('.html5-video-player');
+        const titleEl = (activeReel && (activeReel.querySelector('yt-shorts-video-title-view-model') ||
+                                        activeReel.querySelector('h2.title'))) ||
+                        (player && player.querySelector('.ytp-title-link'));
+        if (titleEl) videoTitle = titleEl.innerText || titleEl.textContent;
       } else {
         const titleEl = document.querySelector('h1.ytd-watch-metadata') || document.querySelector('#title h1');
         if (titleEl) videoTitle = titleEl.innerText || titleEl.textContent;
@@ -238,6 +331,19 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
+// After a full 360° spin, snap the shutter icon back to 0° without animating so the next capture spins again
+function enableSpinReset(svg) {
+  if (!svg) return;
+  svg.addEventListener('transitionend', () => {
+    if (svg.classList.contains('rotated-360')) {
+      svg.style.transition = 'none';
+      svg.classList.remove('rotated-360');
+      void svg.offsetWidth;
+      svg.style.transition = '';
+    }
+  });
+}
+
 // Trigger Layer 2: UI Injection (Watch Page & Shorts)
 function injectCaptureButton() {
   // 1. Inject into standard YouTube player controls
@@ -267,17 +373,7 @@ function injectCaptureButton() {
       </svg>
     `;
 
-    const svg = button.querySelector('svg');
-    if (svg) {
-      svg.addEventListener('transitionend', () => {
-        if (svg.classList.contains('rotated-360')) {
-          svg.style.transition = 'none';
-          svg.classList.remove('rotated-360');
-          void svg.offsetWidth;
-          svg.style.transition = '';
-        }
-      });
-    }
+    enableSpinReset(button.querySelector('svg'));
 
     // Hover Tooltip logic to mimic YouTube native tooltips
     let originalTransform = '';
@@ -356,6 +452,8 @@ function injectCaptureButton() {
       const tooltip = player.querySelector('.ytp-tooltip:not(.ytp-preview)');
       if (tooltip) {
         tooltip.classList.remove('ytp-show');
+        // Undo the display:block from updateTooltipPosition; YouTube hides its tooltip with an inline display:none
+        tooltip.style.display = 'none';
         if (originalTransform) {
           tooltip.style.transform = originalTransform;
           originalTransform = '';
@@ -383,20 +481,21 @@ function injectCaptureButton() {
     }
   });
 
-  // 2. Inject into YouTube Shorts action bar controls
-  const shortsActionBars = document.querySelectorAll('ytd-reel-player-overlay-renderer #actions, ytd-reel-video-renderer #actions');
+  // 2. Inject into YouTube Shorts action bars (the like / comments / share / remix column)
+  //    reel-action-bar-view-model is the current layout; the #actions selectors cover older ones
+  const shortsActionBars = document.querySelectorAll('reel-action-bar-view-model, ytd-reel-player-overlay-renderer #actions, ytd-reel-video-renderer #actions');
   shortsActionBars.forEach((actionBar) => {
-    if (actionBar.querySelector('#yt-shorts-capture-btn')) return;
+    if (actionBar.querySelector('.yt-shorts-capture-btn')) return;
 
     const button = document.createElement('div');
-    button.id = 'yt-shorts-capture-btn';
-    button.className = 'yt-spec-button-shape-next';
+    button.className = 'yt-shorts-capture-btn';
+    button.setAttribute('role', 'button');
+    button.setAttribute('tabindex', '0');
     button.setAttribute('aria-label', 'Capture Frame (Shift+S)');
-    button.style.cssText = 'cursor: pointer; margin-top: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center;';
 
     button.innerHTML = `
-      <div style="background: rgba(255, 255, 255, 0.2); border-radius: 50%; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; transition: background 0.2s;">
-        <svg class="yt-capture-svg" viewBox="0 0 24 24" style="stroke: white; fill: none; width: 26px; height: 26px; stroke-width: 1.8;">
+      <div class="yt-shorts-capture-circle">
+        <svg class="yt-capture-svg" viewBox="0 0 24 24">
           <circle cx="12" cy="12" r="10" />
           <path d="M 14.31 8 A 12 12 0 0 1 20.05 17.94" stroke-linecap="round" />
           <path d="M 9.69 8 A 12 12 0 0 1 21.17 8" stroke-linecap="round" />
@@ -406,32 +505,62 @@ function injectCaptureButton() {
           <path d="M 16.62 12 A 12 12 0 0 1 10.88 21.94" stroke-linecap="round" />
         </svg>
       </div>
-      <span style="color: white; font-size: 12px; margin-top: 6px; font-weight: 500; text-shadow: 0 1px 2px rgba(0,0,0,0.6);">Capture</span>
+      <span class="yt-shorts-capture-label">Snap!</span>
+      <span class="yt-shorts-capture-tooltip">Capture Frame (Shift+S)</span>
     `;
 
-    button.addEventListener('click', (e) => {
+    enableSpinReset(button.querySelector('svg'));
+
+    const capture = (e) => {
+      e.preventDefault();
       e.stopPropagation();
       const reel = button.closest('ytd-reel-video-renderer');
       const video = reel ? reel.querySelector('video') : null;
       captureFrame(video);
+    };
+    button.addEventListener('click', capture);
+    button.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') capture(e);
     });
 
-    actionBar.appendChild(button);
+    // Sit right under Remix, keeping YouTube's sound/channel thumbnail at the bottom of the column
+    const pivot = actionBar.querySelector(':scope > pivot-button-view-model');
+    actionBar.insertBefore(button, pivot);
   });
 }
 
 // Dynamic triggers for SPA navigation and dynamic player loading
 let playerObserver = null;
+let shortsObserver = null;
+let shortsRoot = null;
+let injectionQueued = false;
+
+// Coalesce bursts of DOM mutations into one injection pass per frame
+function queueInjection() {
+  if (injectionQueued) return;
+  injectionQueued = true;
+  requestAnimationFrame(() => {
+    injectionQueued = false;
+    injectCaptureButton();
+  });
+}
 
 function ensureButtonInjected() {
   injectCaptureButton();
 
-  const player = document.querySelector('.html5-video-player') || document.querySelector('ytd-shorts');
+  const player = document.querySelector('.html5-video-player');
   if (player && !playerObserver) {
-    playerObserver = new MutationObserver(() => {
-      injectCaptureButton();
-    });
+    playerObserver = new MutationObserver(queueInjection);
     playerObserver.observe(player, { childList: true, subtree: true });
+  }
+
+  // Shorts action bars live outside the video player and get re-rendered while scrolling between Shorts
+  const shorts = document.querySelector('ytd-shorts');
+  if (shorts && shorts !== shortsRoot) {
+    if (shortsObserver) shortsObserver.disconnect();
+    shortsRoot = shorts;
+    shortsObserver = new MutationObserver(queueInjection);
+    shortsObserver.observe(shorts, { childList: true, subtree: true });
   }
 }
 
@@ -451,3 +580,12 @@ setInterval(() => {
 
 // Run initial injection check on load
 ensureButtonInjected();
+
+// Listen for messaging commands (e.g. from popup Manual download button)
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message && message.action === 'captureFrame') {
+    captureFrame();
+    sendResponse({ status: 'success' });
+  }
+  return true;
+});

@@ -22,6 +22,34 @@ style.textContent = `
     animation: yt-snappy-camera-flash 0.45s ease-in-out forwards !important;
     will-change: opacity, transform;
   }
+  /* Force max limit: the paused frame held over the player while YouTube swaps streams underneath.
+     z-index 20 sits above YouTube's loading spinner (18) and pause icon (19), below its controls (24+) */
+  .yt-snappy-freeze {
+    position: absolute;
+    z-index: 20;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  .yt-snappy-freeze.fade-out {
+    opacity: 0;
+  }
+  .yt-snappy-freeze canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  .yt-snappy-freeze-label {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 7px 10px;
+    border-radius: 8px;
+    background: rgba(28, 28, 28, 0.9);
+    color: #fff;
+    font: 500 13px/1 Roboto, Arial, sans-serif;
+    white-space: nowrap;
+  }
   @keyframes yt-snappy-camera-flash {
     0% {
       opacity: 0;
@@ -307,16 +335,22 @@ async function grabAtForcedQuality(video, resolution) {
   if (!target || QUALITY_HEIGHTS[target] <= (QUALITY_HEIGHTS[info.current] || 0)) return null;
 
   const wasPlaying = !video.paused;
-  video.pause();
+  // Pause through YouTube's player, not the <video> element: if YouTube still thinks it's playing,
+  // the quality switch reloads the stream and carries on playing from a different spot
+  await askBridge(player, 'pause');
   const frameTime = video.currentTime;
   const originalPixels = video.videoWidth * video.videoHeight;
   // Kept in case the sharper stream never shows up
   const originalFrame = grabFrame(video);
+  const freeze = showFreezeFrame(player, video, originalFrame, `Snapping ${QUALITY_HEIGHTS[target]}p…`);
 
   try {
+    // YouTube's own clock lags the video by a few frames, and every quality reload lands on that clock.
+    // Seeking through the player syncs it to the exact paused frame, for both the switch and the restore.
+    await askBridge(player, 'seekTo', { time: frameTime });
     await askBridge(player, 'setQuality', { quality: target });
 
-    // YouTube keeps the paused timestamp and swaps in the sharper stream, usually within a second or two
+    // YouTube reloads the paused video in the sharper stream, usually within a second or two
     const switched = await waitFor(() => {
       const v = player.querySelector('video');
       return v && v.videoWidth * v.videoHeight > originalPixels && !v.seeking && v.readyState >= 2;
@@ -324,19 +358,55 @@ async function grabAtForcedQuality(video, resolution) {
     const hiResVideo = player.querySelector('video');
     if (!switched || !hiResVideo) return originalFrame;
 
-    // Seek onto the paused timestamp so the frame is decoded fresh from the new stream
-    hiResVideo.currentTime = frameTime;
-    await waitFor(() => !hiResVideo.seeking && hiResVideo.readyState >= 2, 5000);
+    if (Math.abs(hiResVideo.currentTime - frameTime) > 0.001) {
+      await askBridge(player, 'seekTo', { time: frameTime });
+      await waitFor(() => !hiResVideo.seeking && hiResVideo.readyState >= 2, 5000);
+    }
     if (Math.abs(hiResVideo.currentTime - frameTime) > 0.001) return originalFrame;
 
     return grabFrame(hiResVideo);
   } finally {
     await askBridge(player, 'restoreQuality', { preferred: info.preferred, stored: info.stored });
-    if (wasPlaying) {
+    // Keep the frozen frame up until the user's own quality has loaded back in, so the reloads stay hidden
+    await new Promise(r => setTimeout(r, 50));
+    await waitFor(() => {
       const v = player.querySelector('video');
-      if (v) v.play().catch(() => {});
-    }
+      return v && v.videoWidth > 0 && !v.seeking && v.readyState >= 2;
+    }, 5000);
+    if (wasPlaying) await askBridge(player, 'play');
+    freeze.classList.add('fade-out');
+    setTimeout(() => freeze.remove(), 250);
   }
+}
+
+// Holds the paused frame over the player while Force max limit swaps YouTube's streams underneath,
+// hiding the black reloads and loading spinner
+function showFreezeFrame(player, video, frame, labelText) {
+  const playerRect = player.getBoundingClientRect();
+  const videoRect = video.getBoundingClientRect();
+
+  const freeze = document.createElement('div');
+  freeze.className = 'yt-snappy-freeze';
+  freeze.style.left = `${videoRect.left - playerRect.left}px`;
+  freeze.style.top = `${videoRect.top - playerRect.top}px`;
+  freeze.style.width = `${videoRect.width}px`;
+  freeze.style.height = `${videoRect.height}px`;
+
+  // A copy, so the original frame stays untouched in case it's the one that gets saved
+  const canvas = document.createElement('canvas');
+  canvas.width = frame.width;
+  canvas.height = frame.height;
+  canvas.getContext('2d').drawImage(frame, 0, 0);
+  canvas.style.objectFit = window.getComputedStyle(video).objectFit;
+  freeze.appendChild(canvas);
+
+  const label = document.createElement('span');
+  label.className = 'yt-snappy-freeze-label';
+  label.textContent = labelText;
+  freeze.appendChild(label);
+
+  player.appendChild(freeze);
+  return freeze;
 }
 
 // Core function to grab the raw frame data
@@ -371,6 +441,9 @@ function captureFrame(specificVideo = null) {
   chrome.storage.local.get({ format: 'image/jpeg', resolution: 'native', forceMax: false }, async (settings) => {
     const frameTime = video.currentTime || 0;
 
+    // Trigger camera flash animation over the active video window as the frame is taken
+    triggerFlashAnimation(video);
+
     // The frame comes straight from the video, or from the sharper stream Force max limit switched to
     let source = video;
     if (settings.forceMax) {
@@ -385,9 +458,6 @@ function captureFrame(specificVideo = null) {
     }
     const sourceWidth = source === video ? video.videoWidth : source.width;
     const sourceHeight = source === video ? video.videoHeight : source.height;
-
-    // Trigger camera flash animation over the active video window as the frame is taken
-    triggerFlashAnimation(video);
 
     try {
       let targetWidth = sourceWidth;

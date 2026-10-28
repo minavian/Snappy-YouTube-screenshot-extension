@@ -219,6 +219,126 @@ function triggerFlashAnimation(video) {
   setTimeout(cleanup, 500);
 }
 
+// YouTube's quality names, keyed to the number in their "1080p"-style labels
+const QUALITY_HEIGHTS = {
+  highres: 4320,
+  hd2880: 2880,
+  hd2160: 2160,
+  hd1440: 1440,
+  hd1080: 1080,
+  hd720: 720,
+  large: 480,
+  medium: 360,
+  small: 240,
+  tiny: 144
+};
+
+let snappyCounter = 0;
+let forcedCaptureRunning = false;
+
+// Ask bridge.js (running inside YouTube's page) to drive the player's quality API
+function askBridge(player, cmd, args = {}) {
+  if (!player.dataset.snappyPlayer) {
+    player.dataset.snappyPlayer = String(++snappyCounter);
+  }
+  const id = ++snappyCounter;
+
+  return new Promise((resolve) => {
+    const onResponse = (event) => {
+      let response;
+      try {
+        response = JSON.parse(event.detail);
+      } catch (e) {
+        return;
+      }
+      if (response.id !== id) return;
+      clearTimeout(timer);
+      document.removeEventListener('snappy-response', onResponse);
+      resolve(response.result);
+    };
+    const timer = setTimeout(() => {
+      document.removeEventListener('snappy-response', onResponse);
+      resolve(null);
+    }, 1000);
+
+    document.addEventListener('snappy-response', onResponse);
+    document.dispatchEvent(new CustomEvent('snappy-request', {
+      detail: JSON.stringify({ id, player: player.dataset.snappyPlayer, cmd, ...args })
+    }));
+  });
+}
+
+function grabFrame(video) {
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  return canvas;
+}
+
+function waitFor(check, timeoutMs) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const tick = () => {
+      if (check()) return resolve(true);
+      if (Date.now() - start > timeoutMs) return resolve(false);
+      setTimeout(tick, 100);
+    };
+    tick();
+  });
+}
+
+// Force max limit: pause, bump YouTube to the highest quality within the limit, re-grab the exact
+// same frame from the sharper stream, then put the user's quality back.
+// Returns a canvas with the frame, or null when there's nothing higher to switch to.
+async function grabAtForcedQuality(video, resolution) {
+  const player = video.closest('.html5-video-player');
+  if (!player || player.classList.contains('ad-showing')) return null;
+  // Switching quality on the very last frame makes YouTube reload the video with nothing to show
+  if (video.ended || video.currentTime >= video.duration - 0.1) return null;
+
+  const info = await askBridge(player, 'getQuality');
+  if (!info || !Array.isArray(info.available)) return null;
+
+  const limit = resolution === 'native' ? Infinity : parseInt(resolution, 10);
+  const target = info.available
+    .filter(q => QUALITY_HEIGHTS[q] && QUALITY_HEIGHTS[q] <= limit)
+    .sort((a, b) => QUALITY_HEIGHTS[b] - QUALITY_HEIGHTS[a])[0];
+  if (!target || QUALITY_HEIGHTS[target] <= (QUALITY_HEIGHTS[info.current] || 0)) return null;
+
+  const wasPlaying = !video.paused;
+  video.pause();
+  const frameTime = video.currentTime;
+  const originalPixels = video.videoWidth * video.videoHeight;
+  // Kept in case the sharper stream never shows up
+  const originalFrame = grabFrame(video);
+
+  try {
+    await askBridge(player, 'setQuality', { quality: target });
+
+    // YouTube keeps the paused timestamp and swaps in the sharper stream, usually within a second or two
+    const switched = await waitFor(() => {
+      const v = player.querySelector('video');
+      return v && v.videoWidth * v.videoHeight > originalPixels && !v.seeking && v.readyState >= 2;
+    }, 10000);
+    const hiResVideo = player.querySelector('video');
+    if (!switched || !hiResVideo) return originalFrame;
+
+    // Seek onto the paused timestamp so the frame is decoded fresh from the new stream
+    hiResVideo.currentTime = frameTime;
+    await waitFor(() => !hiResVideo.seeking && hiResVideo.readyState >= 2, 5000);
+    if (Math.abs(hiResVideo.currentTime - frameTime) > 0.001) return originalFrame;
+
+    return grabFrame(hiResVideo);
+  } finally {
+    await askBridge(player, 'restoreQuality', { preferred: info.preferred, stored: info.stored });
+    if (wasPlaying) {
+      const v = player.querySelector('video');
+      if (v) v.play().catch(() => {});
+    }
+  }
+}
+
 // Core function to grab the raw frame data
 function captureFrame(specificVideo = null) {
   const video = getActiveVideo(specificVideo);
@@ -227,9 +347,8 @@ function captureFrame(specificVideo = null) {
     console.error('Active YouTube video element with valid dimensions not found.');
     return;
   }
-
-  // Trigger camera flash animation immediately over the active video window
-  triggerFlashAnimation(video);
+  // A Force max limit snap is still swapping qualities; let it finish first
+  if (forcedCaptureRunning) return;
 
   // Animate the button SVG immediately for responsive feedback
   // (the button belonging to the captured video: its own Shorts reel, or the watch-page player)
@@ -248,19 +367,39 @@ function captureFrame(specificVideo = null) {
     }
   }
 
-  // Fetch preferences from browser storage (Defaults to JPEG and Native resolution if unset)
-  chrome.storage.local.get({ format: 'image/jpeg', resolution: 'native' }, (settings) => {
+  // Fetch preferences from browser storage (Defaults to JPEG, Native resolution and no forcing if unset)
+  chrome.storage.local.get({ format: 'image/jpeg', resolution: 'native', forceMax: false }, async (settings) => {
+    const frameTime = video.currentTime || 0;
+
+    // The frame comes straight from the video, or from the sharper stream Force max limit switched to
+    let source = video;
+    if (settings.forceMax) {
+      forcedCaptureRunning = true;
+      try {
+        source = (await grabAtForcedQuality(video, settings.resolution)) || video;
+      } catch (error) {
+        console.error('Force max limit failed, snapping the frame as it is:', error);
+      } finally {
+        forcedCaptureRunning = false;
+      }
+    }
+    const sourceWidth = source === video ? video.videoWidth : source.width;
+    const sourceHeight = source === video ? video.videoHeight : source.height;
+
+    // Trigger camera flash animation over the active video window as the frame is taken
+    triggerFlashAnimation(video);
+
     try {
-      let targetWidth = video.videoWidth;
-      let targetHeight = video.videoHeight;
+      let targetWidth = sourceWidth;
+      let targetHeight = sourceHeight;
 
       // Calculate scaled downscaling proportions if a limit is active
       if (settings.resolution !== 'native') {
         const maxLongEdgeHeight = parseInt(settings.resolution, 10);
 
-        if (video.videoHeight > maxLongEdgeHeight) {
-          const scaleFactor = maxLongEdgeHeight / video.videoHeight;
-          targetWidth = Math.round(video.videoWidth * scaleFactor);
+        if (sourceHeight > maxLongEdgeHeight) {
+          const scaleFactor = maxLongEdgeHeight / sourceHeight;
+          targetWidth = Math.round(sourceWidth * scaleFactor);
           targetHeight = maxLongEdgeHeight;
         }
       }
@@ -271,7 +410,7 @@ function captureFrame(specificVideo = null) {
 
       const ctx = canvas.getContext('2d');
       // The browser natively handles high-quality downsampling right here:
-      ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
+      ctx.drawImage(source, 0, 0, targetWidth, targetHeight);
 
       // Map matching file extension formats
       let fileExt = 'png';
@@ -303,7 +442,7 @@ function captureFrame(specificVideo = null) {
       videoTitle = videoTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase().substring(0, 50);
       if (!videoTitle) videoTitle = 'youtube-frame';
 
-      const currentTime = Math.floor(video.currentTime || 0);
+      const currentTime = Math.floor(frameTime);
       const minutes = Math.floor(currentTime / 60);
       const seconds = currentTime % 60;
       const timestamp = `${minutes}m${seconds}s`;

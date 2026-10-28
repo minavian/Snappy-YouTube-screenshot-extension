@@ -72,6 +72,18 @@ document.addEventListener('DOMContentLoaded', () => {
   setupCustomSelect(formatSelect, 'format', 'image/jpeg');
   setupCustomSelect(resSelect, 'resolution', 'native');
 
+  // Force max limit toggle: content.js bumps YouTube's quality up to the limit for the frame being snapped
+  const forceToggle = document.getElementById('force-max-toggle');
+  chrome.storage.local.get({ forceMax: false }, (items) => {
+    forceToggle.setAttribute('aria-checked', String(items.forceMax));
+    requestAnimationFrame(() => forceToggle.classList.add('ready'));
+  });
+  forceToggle.addEventListener('click', () => {
+    const on = forceToggle.getAttribute('aria-checked') !== 'true';
+    forceToggle.setAttribute('aria-checked', String(on));
+    chrome.storage.local.set({ forceMax: on });
+  });
+
   // Close all open dropdowns when clicking outside
   document.addEventListener('click', () => {
     document.querySelectorAll('.custom-select').forEach((el) => {

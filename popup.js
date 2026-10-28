@@ -52,6 +52,8 @@ document.addEventListener('DOMContentLoaded', () => {
       
       if (!selectedOption) {
         selectedOption = selectEl.querySelector(`.custom-option[data-value="${defaultValue}"]`);
+        // The saved choice no longer exists (like the old 6k limit), so save the default content.js should use instead
+        chrome.storage.local.set({ [storageKey]: defaultValue });
       }
       
       if (selectedOption) {

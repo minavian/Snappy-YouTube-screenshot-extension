@@ -50,6 +50,56 @@ style.textContent = `
     font: 500 13px/1 Roboto, Arial, sans-serif;
     white-space: nowrap;
   }
+  /* Background capture: the hidden, muted copy of the page that loads the sharper stream */
+  .yt-snappy-copy {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 640px;
+    height: 360px;
+    border: 0;
+    opacity: 0;
+    pointer-events: none;
+    z-index: -1;
+  }
+  /* The "Snapping…" pill shown while the video keeps playing. z-index 60 sits above YouTube's top bar (58) */
+  .yt-snappy-progress {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    z-index: 60;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: rgba(28, 28, 28, 0.9);
+    color: #fff;
+    font: 500 13px/1 Roboto, Arial, sans-serif;
+    white-space: nowrap;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  .yt-snappy-progress.fade-out {
+    opacity: 0;
+  }
+  .yt-snappy-progress-track {
+    display: block;
+    width: 120px;
+    height: 3px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.25);
+    overflow: hidden;
+  }
+  .yt-snappy-progress-fill {
+    display: block;
+    width: 0;
+    height: 100%;
+    background: #FF70A6;
+    transition: width 0.3s ease;
+  }
   @keyframes yt-snappy-camera-flash {
     0% {
       opacity: 0;
@@ -316,6 +366,142 @@ function waitFor(check, timeoutMs) {
   });
 }
 
+// The highest quality YouTube offers within the limit, or null when it's no sharper than what's playing
+function pickTargetQuality(info, resolution) {
+  const limit = resolution === 'native' ? Infinity : parseInt(resolution, 10);
+  const target = info.available
+    .filter(q => QUALITY_HEIGHTS[q] && QUALITY_HEIGHTS[q] <= limit)
+    .sort((a, b) => QUALITY_HEIGHTS[b] - QUALITY_HEIGHTS[a])[0];
+  if (!target || QUALITY_HEIGHTS[target] <= (QUALITY_HEIGHTS[info.current] || 0)) return null;
+  return target;
+}
+
+// The video's ID from a watch or Shorts URL
+function getVideoId() {
+  const url = new URL(location.href);
+  if (url.pathname.startsWith('/shorts/')) return url.pathname.split('/')[2] || null;
+  return url.searchParams.get('v');
+}
+
+// Background capture: while the video keeps playing, a hidden muted copy of the page loads the sharper
+// stream and grabs the same moment from it, so a slow connection never freezes the video being watched.
+// Returns a canvas with the frame, or null when there's nothing higher to switch to.
+async function grabInBackground(video, resolution) {
+  const player = video.closest('.html5-video-player');
+  if (!player || player.classList.contains('ad-showing')) return null;
+  const videoId = getVideoId();
+  if (!videoId) return null;
+
+  const info = await askBridge(player, 'getQuality');
+  if (!info || !Array.isArray(info.available)) return null;
+
+  const target = pickTargetQuality(info, resolution);
+  if (!target) return null;
+
+  const frameTime = video.currentTime;
+  const originalPixels = video.videoWidth * video.videoHeight;
+  // The moment the user snapped, kept in case the sharper stream is too slow to arrive
+  const originalFrame = grabFrame(video);
+  const progress = showSnapProgress(player, `Snapping ${QUALITY_HEIGHTS[target]}p…`);
+
+  const frame = document.createElement('iframe');
+  frame.id = `snappy-copy-${++snappyCounter}`;
+  frame.className = 'yt-snappy-copy';
+  frame.src = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}&t=${Math.floor(frameTime)}s`;
+  // Keep the copy silent from its very first frame
+  const muter = setInterval(() => {
+    if (frame.contentDocument) frame.contentDocument.querySelectorAll('video').forEach(v => { v.muted = true; });
+  }, 30);
+  document.body.appendChild(frame);
+  let copy = null;
+
+  try {
+    const loaded = await waitFor(() => {
+      copy = frame.contentDocument && frame.contentDocument.querySelector('.html5-video-player');
+      return !!copy;
+    }, 15000);
+    if (!loaded) return originalFrame;
+    progress.set(0.2);
+
+    // The copy's player API shows up a moment after its element does
+    let ready = false;
+    for (let i = 0; i < 50 && !ready; i++) {
+      const copyInfo = await askBridge(copy, 'getQuality', { frame: frame.id });
+      ready = !!copyInfo && Array.isArray(copyInfo.available) && copyInfo.available.includes(target);
+      if (!ready) await new Promise(r => setTimeout(r, 200));
+    }
+    if (!ready) return originalFrame;
+    await askBridge(copy, 'mute', { frame: frame.id });
+
+    // An ad in the copy has to play out (muted and unseen) before the video itself loads
+    if (!(await waitFor(() => !copy.classList.contains('ad-showing'), 30000))) return originalFrame;
+    progress.set(0.4);
+
+    // YouTube only loads another quality into a copy that has started playing
+    await askBridge(copy, 'play', { frame: frame.id });
+    await askBridge(copy, 'setQuality', { frame: frame.id, quality: target });
+    await askBridge(copy, 'seekTo', { frame: frame.id, time: frameTime });
+
+    const switched = await waitFor(() => {
+      const v = copy.querySelector('video');
+      return v && v.videoWidth * v.videoHeight > originalPixels && !v.seeking && v.readyState >= 2;
+    }, 20000);
+    const hiResVideo = copy.querySelector('video');
+    if (!switched || !hiResVideo) return originalFrame;
+    progress.set(0.9);
+
+    // Settle the copy on the exact moment the user snapped
+    await askBridge(copy, 'pause', { frame: frame.id });
+    await askBridge(copy, 'seekTo', { frame: frame.id, time: frameTime });
+    await waitFor(() => !hiResVideo.seeking && hiResVideo.readyState >= 2, 5000);
+    if (Math.abs(hiResVideo.currentTime - frameTime) > 0.001) return originalFrame;
+
+    return grabFrame(hiResVideo);
+  } finally {
+    clearInterval(muter);
+    // The copy saves its quality as the user's default, just like the real player would
+    if (copy) await askBridge(copy, 'restoreQuality', { frame: frame.id, preferred: info.preferred, stored: info.stored });
+    frame.remove();
+    progress.done();
+  }
+}
+
+// Small "Snapping…" pill with a progress bar over the player while a background capture runs
+function showSnapProgress(player, labelText) {
+  const pill = document.createElement('div');
+  pill.className = 'yt-snappy-progress';
+  const label = document.createElement('span');
+  label.textContent = labelText;
+  const track = document.createElement('span');
+  track.className = 'yt-snappy-progress-track';
+  const fill = document.createElement('span');
+  fill.className = 'yt-snappy-progress-fill';
+  track.appendChild(fill);
+  pill.append(label, track);
+  player.appendChild(pill);
+
+  let value = 0;
+  const set = (next) => {
+    value = Math.max(value, next);
+    fill.style.width = `${value * 100}%`;
+  };
+  // YouTube doesn't say how much of the sharper stream has arrived, so the bar moves in steps
+  // and creeps forward on its own while the download is pending
+  const creep = setInterval(() => {
+    if (value < 0.85) set(Math.min(0.85, value + 0.02));
+  }, 400);
+
+  return {
+    set,
+    done() {
+      clearInterval(creep);
+      set(1);
+      pill.classList.add('fade-out');
+      setTimeout(() => pill.remove(), 250);
+    }
+  };
+}
+
 // Force max limit: pause, bump YouTube to the highest quality within the limit, re-grab the exact
 // same frame from the sharper stream, then put the user's quality back.
 // Returns a canvas with the frame, or null when there's nothing higher to switch to.
@@ -328,11 +514,8 @@ async function grabAtForcedQuality(video, resolution) {
   const info = await askBridge(player, 'getQuality');
   if (!info || !Array.isArray(info.available)) return null;
 
-  const limit = resolution === 'native' ? Infinity : parseInt(resolution, 10);
-  const target = info.available
-    .filter(q => QUALITY_HEIGHTS[q] && QUALITY_HEIGHTS[q] <= limit)
-    .sort((a, b) => QUALITY_HEIGHTS[b] - QUALITY_HEIGHTS[a])[0];
-  if (!target || QUALITY_HEIGHTS[target] <= (QUALITY_HEIGHTS[info.current] || 0)) return null;
+  const target = pickTargetQuality(info, resolution);
+  if (!target) return null;
 
   const wasPlaying = !video.paused;
   // Pause through YouTube's player, not the <video> element: if YouTube still thinks it's playing,
@@ -449,7 +632,9 @@ function captureFrame(specificVideo = null) {
     if (settings.forceMax) {
       forcedCaptureRunning = true;
       try {
-        source = (await grabAtForcedQuality(video, settings.resolution)) || video;
+        // A playing video keeps playing while a hidden copy fetches the sharper frame; a paused one switches in place
+        const grab = video.paused ? grabAtForcedQuality : grabInBackground;
+        source = (await grab(video, settings.resolution)) || video;
       } catch (error) {
         console.error('Force max limit failed, snapping the frame as it is:', error);
       } finally {

@@ -8,7 +8,10 @@ document.addEventListener('snappy-request', (event) => {
     return;
   }
 
-  const player = document.querySelector(`[data-snappy-player="${request.player}"]`);
+  // The player can also live inside Snappy's hidden copy of the page (background capture)
+  const frame = request.frame ? document.getElementById(request.frame) : null;
+  const root = frame ? frame.contentDocument : document;
+  const player = root && root.querySelector(`[data-snappy-player="${request.player}"]`);
   let result = null;
 
   try {
@@ -26,6 +29,9 @@ document.addEventListener('snappy-request', (event) => {
         result = true;
       } else if (request.cmd === 'play') {
         player.playVideo();
+        result = true;
+      } else if (request.cmd === 'mute') {
+        player.mute();
         result = true;
       } else if (request.cmd === 'seekTo') {
         player.seekTo(request.time, true);

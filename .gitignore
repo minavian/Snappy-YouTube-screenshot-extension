@@ -1,0 +1,5 @@
+# Kept next to the extension, not part of it
+/website/
+/store images/
+/backup/
+*.zip

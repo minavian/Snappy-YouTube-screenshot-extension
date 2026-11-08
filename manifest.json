@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Snappy: YouTube Screenshot",
-  "version": "1.3",
+  "version": "1.0",
   "description": "Snap YouTube and Shorts frames in one click as JPEG, PNG or WebP. Force max limit snaps from the sharpest stream, even in 360p.",
   "permissions": [
     "activeTab",

@@ -298,10 +298,38 @@
       font-family: 'Fredoka', sans-serif;
       text-transform: lowercase;
       letter-spacing: 0.3px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      display: grid;
+      place-items: center;
       box-sizing: border-box;
+      text-decoration: none;
+      cursor: pointer;
+      outline: none;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+    /* The credit and the site's address share one spot; hovering swaps them, a click opens the site */
+    .footer-border span {
+      grid-area: 1 / 1;
+      white-space: nowrap;
+      transition: opacity 0.18s ease, transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .footer-border .site {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    .footer-border:hover,
+    .footer-border:focus-visible {
+      background-color: #FFD6E0;
+      color: rgba(0, 0, 0, 0.72);
+    }
+    .footer-border:hover .made,
+    .footer-border:focus-visible .made {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    .footer-border:hover .site,
+    .footer-border:focus-visible .site {
+      opacity: 1;
+      transform: none;
     }
     /* --- Vector SVG Background Layouts --- */
     /* Clips the peeking shapes at the popup's edges so they can't widen it past 250px.
@@ -454,7 +482,10 @@
       </span>
     </button>
   </div>
-  <div class="footer-border">💗 made by mina vian :3</div>
+  <a class="footer-border" href="https://snappy.minavian.com" target="_blank" rel="noopener" aria-label="Made by Mina Vian. Open snappy.minavian.com">
+    <span class="made">💗 made by mina vian :3</span>
+    <span class="site">💗 snappy.minavian.com ↗</span>
+  </a>
   <script src="popup.js"></script>
 </body>
 </html>

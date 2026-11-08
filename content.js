@@ -409,6 +409,38 @@ function showFreezeFrame(player, video, frame, labelText) {
   return freeze;
 }
 
+// The snap's file name: the video's title as YouTube shows it, then the moment, like
+// "WING IT! - Blender Open Movie (0m17s).png" or "Some Long Stream (1h02m05s).jpg".
+// Only what Windows, macOS and Linux can't have in a file name is swapped out.
+function snapFileName(title, time, ext) {
+  let name = (title || '')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s*:\s*/g, ' - ')
+    .replace(/[\\/|]/g, '-')
+    .replace(/"/g, "'")
+    .replace(/[*?<>]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^[\s.-]+|[\s.]+$/g, '');
+
+  // Long titles end at a whole word, counting emoji and other wide characters as one
+  const chars = Array.from(name);
+  if (chars.length > 100) {
+    const cut = chars.slice(0, 100).join('');
+    const space = cut.lastIndexOf(' ');
+    name = (space > 60 ? cut.slice(0, space) : cut).replace(/[\s.,;-]+$/, '');
+  }
+  if (!name) name = 'YouTube frame';
+
+  const total = Math.max(0, Math.floor(time || 0));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = String(total % 60).padStart(2, '0');
+  const stamp = hours ? `${hours}h${String(minutes).padStart(2, '0')}m${seconds}s` : `${minutes}m${seconds}s`;
+
+  return `${name} (${stamp}).${ext}`;
+}
+
 // Core function to grab the raw frame data
 function captureFrame(specificVideo = null) {
   const video = getActiveVideo(specificVideo);
@@ -495,7 +527,7 @@ function captureFrame(specificVideo = null) {
       const dataURL = canvas.toDataURL(settings.format, isLossy ? 0.92 : undefined);
 
       // Extract video title safely (handling watch vs shorts pages)
-      let videoTitle = 'youtube-frame';
+      let videoTitle = '';
       if (window.location.href.includes('/shorts')) {
         // The Short's title under the video, falling back to the Shorts player's own (hidden) title bar
         const activeReel = video.closest('ytd-reel-video-renderer');
@@ -508,18 +540,10 @@ function captureFrame(specificVideo = null) {
         const titleEl = document.querySelector('h1.ytd-watch-metadata') || document.querySelector('#title h1');
         if (titleEl) videoTitle = titleEl.innerText || titleEl.textContent;
       }
-      
-      videoTitle = videoTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase().substring(0, 50);
-      if (!videoTitle) videoTitle = 'youtube-frame';
-
-      const currentTime = Math.floor(frameTime);
-      const minutes = Math.floor(currentTime / 60);
-      const seconds = currentTime % 60;
-      const timestamp = `${minutes}m${seconds}s`;
 
       const link = document.createElement('a');
       link.href = dataURL;
-      link.download = `${videoTitle}_${timestamp}.${fileExt}`;
+      link.download = snapFileName(videoTitle, frameTime, fileExt);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
